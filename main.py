@@ -148,6 +148,12 @@ def download_article_content(article, get_type, feed_name):
                 for a in soup.find_all('img'):
                         if a.get('class') == ['attachment-full', 'size-full']:
                                 return download_item(a.get('src'),feed_name)
+        elif get_type == 'align_center':
+                main_page = requests.get(article.link)
+                soup = BeautifulSoup(main_page.text, 'html.parser')
+                for a in soup.find_all('img'):
+                        if a.parent.get('align') == 'center':
+                                return download_item('http://'+article.link.split('/')[2]+a.get('src'),feed_name)
 
 def check_finished(client, db):
         listdir = os.listdir()
