@@ -61,7 +61,7 @@ class rss_db:
 
     
     def getItemByFeed(self, feed):
-        item = self.executevar('SELECT id,local_name,feed,date FROM items WHERE feed=?',(feed,))
+        item = self.executevar('SELECT id,local_name,feed,date FROM items WHERE feed=? ORDER BY date',(feed,))
         return item
     
     def checkItemExists(self, id):

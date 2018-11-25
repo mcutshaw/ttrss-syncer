@@ -100,15 +100,20 @@ def get_articles(client, feed_name):
                                 l.append(art)
                 return l
 
-def article_trim(client, articles, count):
-        if count == 0:
-                return articles
-        articles = sorted(articles, key=lambda x: x.updated, reverse=True)
-        mark_article_read(client,articles[count:])
-        return articles[:count]
+def article_trim(client, articles, release_type, count):
+        if release_type == 'rolling':
+                if count == 0:
+                        return articles
+                articles = sorted(articles, key=lambda x: x.updated, reverse=True)
+                mark_article_read(client,articles[count:])
+                return articles[:count]
+        elif release_type == 'completion':
+                if count == 0:
+                        return articles
+                articles = sorted(articles, key=lambda x: x.updated)
+                return articles[:count]
         
 def download_article_content(article, get_type, feed_name):
-        print(get_type)
         if get_type == 'attachment':
                 return download_item(article.attachments[0]['1'],feed_name)
         elif get_type == 'content_image':
@@ -166,6 +171,12 @@ def check_finished(client, db):
         for item in listdir:
                 if item not in db_locs:
                         os.remove(item)
+def trim_db(feed, db, count, release_type):
+        if release_type == 'rolling' and not count == 0:
+                items = db.getItemByFeed(feed)[::-1]
+                for item in items[count:]:
+                        print(item)
+                        db.removeItem(item[0])
 
 feeds = get_feeds_from_config(config)
 os.chdir(config['Main']['Data'])
@@ -177,8 +188,9 @@ for item in feeds:
         for db_article in db.getItemByFeed(item[0]):                
                 if db_article[0] not in article_ids:
                         db.removeItem(db_article[0])
-        articles = article_trim(client,articles,int(item[1]))
+        articles = article_trim(client,articles,item[3],int(item[1]))
         for art in articles:
                 if not db.checkItemExists(art.id):
                         db.insertItem(art.id, download_article_content(art,item[2],item[0]), item[0], art.updated)
+        trim_db(item[0],db, int(item[1]),item[3])
 check_finished(client, db)
