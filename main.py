@@ -191,6 +191,9 @@ for item in feeds:
         articles = article_trim(client,articles,item[3],int(item[1]))
         for art in articles:
                 if not db.checkItemExists(art.id):
-                        db.insertItem(art.id, download_article_content(art,item[2],item[0]), item[0], art.updated)
+                        if article_content == None:
+                            mark_article_read(client, art.id)
+                        else:
+                            db.insertItem(art.id,article_content , item[0], art.updated)
         trim_db(item[0],db, int(item[1]),item[3])
 check_finished(client, db)
