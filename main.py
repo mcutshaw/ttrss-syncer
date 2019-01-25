@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 import os
 
 config = configparser.ConfigParser()
-config.read('testing.conf')
+config.read('rss.conf')
 db = rss_db(config)
 url = config['Main']['Url']
 username = config['Main']['Username']
