@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 import os
 
 config = configparser.ConfigParser()
-config.read('rss.conf')
+config.read('testing.conf')
 db = rss_db(config)
 url = config['Main']['Url']
 username = config['Main']['Username']
@@ -114,51 +114,63 @@ def article_trim(client, articles, release_type, count):
                 return articles[:count]
         
 def download_article_content(article, get_type, feed_name):
-        if get_type == 'attachment':
-                return download_item(article.attachments[0]['1'],feed_name)
-        elif get_type == 'content_image':
-                soup = BeautifulSoup(article.content, 'html.parser')
-                for a in soup.find_all('a'):
-                        if '.png' in a.get('href') or '.jpg' in a.get('href'):
-                                return download_item(a.get('href'),feed_name)
-        elif get_type == 'cc_main_page':
-                main_page = requests.get(article.link)
-                soup = BeautifulSoup(main_page.text, 'html.parser')
-                for a in soup.find_all('img'):
-                        if a.get('id') == 'cc-comic':
-                                return download_item(a.get('src'),feed_name)
-        elif get_type == 'class_comic_content':
-                main_page = requests.get(article.link)
-                soup = BeautifulSoup(main_page.text, 'html.parser')
-                for a in soup.find_all('img'):
-                        if a.parent.name  == 'div' and a.parent.get('class') == ['comic_content']:
-                                return download_item(a.get('src'),feed_name)
-        elif get_type == 'parent_parent_id_comic':
-                main_page = requests.get(article.link)
-                soup = BeautifulSoup(main_page.text, 'html.parser')
-                soup.url
-                for a in soup.find_all('img'):
-                        if a.parent.parent.get('id') == 'comic':
-                                return download_item('http://'+article.link.split('/')[2]+a.get('src'),feed_name)
+        main_page = requests.get(article.link)
+        soup = BeautifulSoup(main_page.text, 'html.parser')
+        paths = get_type.split(':')
+        a = None
+        print(article.link)
+        for item in paths:
+                if '*' in item:
+                        item = item.replace('*', '')
+                        a = [ a for a in soup.find_all(item)]
+                elif '==' in item:
+                        l = []
+                        item = item.split('==')
+                        for k in a:         
+                                if k.get(item[0]) == item[1]:
+                                        l.append(k)
+                        a = l
 
-        elif get_type == 'parent_id_comicbody':
-                main_page = requests.get(article.link)
-                soup = BeautifulSoup(main_page.text, 'html.parser')
-                for a in soup.find_all('img'):
-                        if a.parent.get('id') == 'comicbody':
-                                return download_item(a.get('src'),feed_name)
-        elif get_type == 'class-size-full':
-                main_page = requests.get(article.link)
-                soup = BeautifulSoup(main_page.text, 'html.parser')
-                for a in soup.find_all('img'):
-                        if a.get('class') == ['attachment-full', 'size-full']:
-                                return download_item(a.get('src'),feed_name)
-        elif get_type == 'align_center':
-                main_page = requests.get(article.link)
-                soup = BeautifulSoup(main_page.text, 'html.parser')
-                for a in soup.find_all('img'):
-                        if a.parent.get('align') == 'center':
-                                return download_item('http://'+article.link.split('/')[2]+a.get('src'),feed_name)
+                elif '...->' in item:
+                        l = []
+                        item = item.split('...->')
+                        for k in a:       
+                                if k.parent.parent.get(item[1]) != None and item[0] in k.parent.parent.get(item[1]):
+                                        l.append(k)
+                        a = l
+                elif '..->' in item:
+                        l = []
+                        item = item.split('..->')
+                        for k in a:       
+                                if k.parent.get(item[1]) != None and item[0] in k.parent.get(item[1]):
+                                        l.append(k)
+                        a = l
+                elif '->' in item:
+                        l = []
+                        item = item.split('->')
+                        for k in a:       
+                                if k.get(item[1]) != None and item[0] in k.get(item[1]):
+                                        l.append(k)
+                        a = l
+        
+                
+                elif '!' in item:
+                        item = item.replace('!', '')
+                        if len(a) > 0:
+                                a = a[0]
+                                return download_item(a.get(item), feed_name)
+                        else:
+                                return None
+                elif '/' in item:
+                        item = item.replace('/','')
+                        if len(a) > 0:
+                                a = a[0]
+                                return download_item('http://'+article.link.split('/')[2]+a.get(item),feed_name)
+                        else:
+                                return None
+                
+                if item == 'attachment':
+                        return download_item(article.attachments[0]['1'],feed_name)
 
 def check_finished(client, db):
         listdir = os.listdir()
