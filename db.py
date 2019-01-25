@@ -14,8 +14,10 @@ class rss_db:
             exit()
         try:    
             self.connect()
-        except:
+        except Exception as e:
             print("Database Error!")
+            print(e)
+            exit()
         tables = self.execute("SELECT name FROM sqlite_master WHERE type='table';")
          
         if(('items',) not in tables): 
