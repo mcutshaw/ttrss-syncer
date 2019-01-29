@@ -6,6 +6,7 @@ from datetime import datetime
 from db import rss_db
 from bs4 import BeautifulSoup
 import os
+from multiprocessing.pool import ThreadPool
 
 config = configparser.ConfigParser()
 config.read('rss.conf')
@@ -42,12 +43,13 @@ def str_to_date(string):
         return datetime_object
 
 def download_item(url,feed_name):
+        print(url)
         response = requests.get(url, stream=True, allow_redirects=True)
         local_filename = feed_name.replace(' ','_')+url.split('/')[-1]
         if os.path.isfile(local_filename):
                 return local_filename
         handle = open(local_filename, "wb")
-        for chunk in response.iter_content(chunk_size=4096000):
+        for chunk in response.iter_content(chunk_size=1024*1024):
                 if chunk:  # filter out keep-alive new chunks
                         handle.write(chunk)
         handle.close()
@@ -118,7 +120,6 @@ def download_article_content(article, get_type, feed_name):
         soup = BeautifulSoup(main_page.text, 'html.parser')
         paths = get_type.split(':')
         a = None
-        print(article.link)
         for item in paths:
                 if '*' in item:
                         item = item.replace('*', '')
@@ -153,7 +154,6 @@ def download_article_content(article, get_type, feed_name):
                                         l.append(k)
                         a = l
         
-                
                 elif '!' in item:
                         item = item.replace('!', '')
                         if len(a) > 0:
@@ -187,8 +187,16 @@ def trim_db(feed, db, count, release_type):
         if release_type == 'rolling' and not count == 0:
                 items = db.getItemByFeed(feed)[::-1]
                 for item in items[count:]:
-                        print(item)
                         db.removeItem(item[0])
+
+def download_articles(db, art ):
+        if not db.checkItemExists(art.id):
+                        article_content = download_article_content(art,item[2],item[0])
+                        if article_content == None:
+                            mark_article_read(client, art.id)
+                        else:
+                            db.insertItem(art.id,article_content , item[0], art.updated)
+        trim_db(item[0],db, int(item[1]),item[3])
 
 feeds = get_feeds_from_config(config)
 os.chdir(config['Main']['Data'])
@@ -201,12 +209,9 @@ for item in feeds:
                 if db_article[0] not in article_ids:
                         db.removeItem(db_article[0])
         articles = article_trim(client,articles,item[3],int(item[1]))
-        for art in articles:
-                if not db.checkItemExists(art.id):
-                        article_content = download_article_content(art,item[2],item[0])
-                        if article_content == None:
-                            mark_article_read(client, art.id)
-                        else:
-                            db.insertItem(art.id,article_content , item[0], art.updated)
-        trim_db(item[0],db, int(item[1]),item[3])
+
+        input_articles = [(rss_db(config), art) for art in articles]
+        p = ThreadPool(4)
+        
+        p.starmap(download_articles,input_articles)                
 check_finished(client, db)
