@@ -124,6 +124,11 @@ def download_article_content(article, get_type, feed_name):
                 if '*' in item:
                         item = item.replace('*', '')
                         a = [ a for a in soup.find_all(item)]
+                elif '#' in item:
+                        item = item.replace('#', '')
+                        if item not in article.title:
+                            return None
+
                 elif '==' in item:
                         l = []
                         item = item.split('==')
