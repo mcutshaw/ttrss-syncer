@@ -17,23 +17,23 @@ password = config['Main']['Password']
 client = TTRClient(url, username, password)
 client.login()
 
-def get_feeds_from_config(config):
+def get_feeds_from_config(config):                                      # makes a list of feed names, count to keep, and filter patterns, release type,
         l = []
         for key in config['Feeds']:
                 name = config['Feeds'][key]
                 count = config[name]['count']
-                get_type = config[name]['get_type']
+                get_filter = config[name]['filter']
                 release_type = config[name]['release_type']
-                l.append((name, count, get_type, release_type))
+                l.append((name, count, get_filter, release_type))
         return l
 
-def mark_article_read(client, id):
+def mark_article_read(client, id):                                      # only function so far that actually needs to support str AND list
         if type(id) == list:
                 for article in id:
                         if(article.unread == True):
                                 article.toggle_unread()
         else:     
-                article = client.get_articles([id])
+                article = client.get_unread_articles([id])
                 article = article[0]
                 if(article.unread == True):
                         article.toggle_unread()
@@ -43,7 +43,6 @@ def str_to_date(string):
         return datetime_object
 
 def download_item(url,feed_name):
-        print(url)
         response = requests.get(url, stream=True, allow_redirects=True) # grabs item to be downloaded as a stream
         local_filename = feed_name.replace(' ','_')+url.split('/')[-1]  # grabs the last element of an url and replaces chars
         if os.path.isfile(local_filename):                              # will not overwrite files, even if they are zero btyes...
@@ -56,44 +55,26 @@ def download_item(url,feed_name):
         return local_filename
 
 def get_feed(client, feed_name):
-    l = []
     for cat in client.get_categories(unread_only=True):
         for feed in cat.feeds():
-                if(type(feed) == str and feed.title) == feed_name:
+                if feed.title == feed_name:
                         return feed
-                elif(type(feed_name) == list and feed.title in feed_name):
-                        l.append(feed)
-    return l
 
 def get_headlines(client, feed_name):
         feeds = get_feed(client, feed_name)
-        if(feeds == []):
+        if(type(feeds) is None):
                 return None
-        elif(type(feed_name) == list):
-                l = []
-                for feed in feeds:
-                        headlines = feed.headlines()
-                        l.append(headlines)
-                return l
-        elif(type(feed_name) == str):
+        else:
                 headlines = feeds.headlines()
                 return headlines
 
-def get_articles(client, feed_name):
+def get_unread_articles(client, feed_name):
         headlines = get_headlines(client, feed_name)
-        if headlines == None:
+        
+        if headlines is None:
                 return None
-        l = []
-        if(type(feed_name) == list):
-                for item in headlines:
-                        z = []
-                        for headline in item:
-                                art = headline.full_article()
-                                if art.unread == True:
-                                        z.append()
-                        l.append(z)
-                return l
-        elif(type(feed_name) == str):
+        else:
+                l = []
                 for headline in headlines:
                         art = headline.full_article()
                         if art.unread == True:
@@ -101,22 +82,20 @@ def get_articles(client, feed_name):
                 return l
 
 def article_trim(client, articles, release_type, count):
-        if release_type == 'rolling':
-                if count == 0:
-                        return articles
-                articles = sorted(articles, key=lambda x: x.updated, reverse=True)
+        if count == 0:
+                return articles
+        elif release_type == 'rolling':
+                articles = sorted(articles, key=lambda x: x.updated, reverse=True)      
                 mark_article_read(client,articles[count:])
                 return articles[:count]
         elif release_type == 'completion':
-                if count == 0:
-                        return articles
-                articles = sorted(articles, key=lambda x: x.updated)
+                articles = sorted(articles, key=lambda x: x.updated)                    
                 return articles[:count]
         
-def filtered_download(article, get_type, feed_name):
+def filtered_download(article, get_filter, feed_name):
         main_page = requests.get(article.link)
         soup = BeautifulSoup(main_page.text, 'html.parser')
-        paths = get_type.split(':')
+        paths = get_filter.split(':')
         a = None
         for item in paths:
                 if '*' in item:
@@ -175,28 +154,29 @@ def filtered_download(article, get_type, feed_name):
                 if item == 'attachment':
                         return download_item(article.attachments[0]['1'],feed_name)
 
-def check_finished(client, db):
-        listdir = os.listdir()
-        db_items = db.getItems()
-        for item in db_items:
-                if item[1] not in listdir:
-                        db.removeItem(item[0])
-                        mark_article_read(client,item[0])
-        db_locs = [name[1] for name in db_items]
+def sync_items(client, db):
+        listdir = os.listdir()                                  # grabs local items
+        db_items = db.getItems()                                # grabs database items
+        for item in db_items:                                   
+                if item[1] not in listdir:                      # if the name of the database item is not local
+                        db.removeItem(item[0])                  # remove it from the database
+                        mark_article_read(client,item[0])       # mark it as read on ttrss (if the item was deleted)
+        db_locs = [name[1] for name in db_items] 
         for item in listdir:
                 if item not in db_locs:
-                        os.remove(item)
+                        os.remove(item)                         # if the item is not in the database remove it
+
 def trim_db(feed, db, count, release_type):
-        if release_type == 'rolling' and not count == 0:
+        if release_type == 'rolling' and count != 0:
                 items = db.getItemByFeed(feed)[::-1]
                 for item in items[count:]:
                         db.removeItem(item[0])
 
-def download_articles(db, art ):
+def download_articles(db, art, item ):
         if not db.checkItemExists(art.id):
                         article_content = filtered_download(art,item[2],item[0])
                         if article_content == None:
-                            mark_article_read(client, art.id)
+                             mark_article_read(client, art.id)
                         else:
                             db.insertItem(art.id,article_content , item[0], art.updated)
         trim_db(item[0],db, int(item[1]),item[3])
@@ -204,8 +184,8 @@ def download_articles(db, art ):
 feeds = get_feeds_from_config(config)
 os.chdir(config['Main']['Data'])
 for item in feeds:
-        articles = get_articles(client, item[0])
-        if articles == None:
+        articles = get_unread_articles(client, item[0])
+        if articles is None:
                 articles = []
         article_ids =  [article.id for article in articles]
         for db_article in db.getItemByFeed(item[0]):                
@@ -213,8 +193,9 @@ for item in feeds:
                         db.removeItem(db_article[0])
         articles = article_trim(client,articles,item[3],int(item[1]))
 
-        input_articles = [(rss_db(config), art) for art in articles]
+        input_articles = [(rss_db(config), art, item) for art in articles]                 # has to create  new database object because of threads
+        print(input_articles)
         p = ThreadPool(4)
         
         p.starmap(download_articles,input_articles)                
-check_finished(client, db)
+sync_items(client, db)
