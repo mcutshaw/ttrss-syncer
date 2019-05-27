@@ -44,12 +44,12 @@ def str_to_date(string):
 
 def download_item(url,feed_name):
         print(url)
-        response = requests.get(url, stream=True, allow_redirects=True)
-        local_filename = feed_name.replace(' ','_')+url.split('/')[-1]
-        if os.path.isfile(local_filename):
+        response = requests.get(url, stream=True, allow_redirects=True) # grabs item to be downloaded as a stream
+        local_filename = feed_name.replace(' ','_')+url.split('/')[-1]  # grabs the last element of an url and replaces chars
+        if os.path.isfile(local_filename):                              # will not overwrite files, even if they are zero btyes...
                 return local_filename
         handle = open(local_filename, "wb")
-        for chunk in response.iter_content(chunk_size=1024*1024):
+        for chunk in response.iter_content(chunk_size=1024*1024):       # download the item and write to a file
                 if chunk:  # filter out keep-alive new chunks
                         handle.write(chunk)
         handle.close()
@@ -59,12 +59,10 @@ def get_feed(client, feed_name):
     l = []
     for cat in client.get_categories(unread_only=True):
         for feed in cat.feeds():
-                if(type(feed_name == str)):
-                        if(feed.title) == feed_name:
-                                return feed
-                elif(type(feed_name == list)):
-                        if(feed.title in feed_name):
-                                l.append(feed)
+                if(type(feed) == str and feed.title) == feed_name:
+                        return feed
+                elif(type(feed_name) == list and feed.title in feed_name):
+                        l.append(feed)
     return l
 
 def get_headlines(client, feed_name):
@@ -115,7 +113,7 @@ def article_trim(client, articles, release_type, count):
                 articles = sorted(articles, key=lambda x: x.updated)
                 return articles[:count]
         
-def download_article_content(article, get_type, feed_name):
+def filtered_download(article, get_type, feed_name):
         main_page = requests.get(article.link)
         soup = BeautifulSoup(main_page.text, 'html.parser')
         paths = get_type.split(':')
@@ -196,7 +194,7 @@ def trim_db(feed, db, count, release_type):
 
 def download_articles(db, art ):
         if not db.checkItemExists(art.id):
-                        article_content = download_article_content(art,item[2],item[0])
+                        article_content = filtered_download(art,item[2],item[0])
                         if article_content == None:
                             mark_article_read(client, art.id)
                         else:
