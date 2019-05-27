@@ -17,14 +17,14 @@ password = config['Main']['Password']
 client = TTRClient(url, username, password)
 client.login()
 
-def get_feeds_from_config(config):                                      # makes a list of feed names, count to keep, and filter patterns, release type,
+def get_feeds_from_config(config):                                      # makes a dict of feed names, count to keep, and filter patterns, release type,
         l = []
         for key in config['Feeds']:
                 name = config['Feeds'][key]
                 count = config[name]['count']
                 get_filter = config[name]['filter']
                 release_type = config[name]['release_type']
-                l.append((name, count, get_filter, release_type))
+                l.append({'feed_name': name, 'count':count, 'filter': get_filter, 'release_type':release_type}) #feed_name,count,filter_release_type
         return l
 
 def mark_article_read(client, id):                                      # only function so far that actually needs to support str AND list
@@ -172,30 +172,28 @@ def trim_db(feed, db, count, release_type):
                 for item in items[count:]:
                         db.removeItem(item[0])
 
-def download_articles(db, art, item ):
+def download_articles(db, art, article_dict ):
         if not db.checkItemExists(art.id):
-                        article_content = filtered_download(art,item[2],item[0])
+                        article_content = filtered_download(art,article_dict['filter'],article_dict['feed_name'])
                         if article_content == None:
                              mark_article_read(client, art.id)
                         else:
-                            db.insertItem(art.id,article_content , item[0], art.updated)
-        trim_db(item[0],db, int(item[1]),item[3])
+                            db.insertItem(art.id,article_content , article_dict['feed_name'], art.updated)
+        trim_db(article_dict['feed_name'],db, int(article_dict['count']),article_dict['release_type'])
 
 feeds = get_feeds_from_config(config)
 os.chdir(config['Main']['Data'])
-for item in feeds:
-        articles = get_unread_articles(client, item[0])
+for article_dict in feeds:
+        articles = get_unread_articles(client, article_dict['feed_name'])
         if articles is None:
                 articles = []
         article_ids =  [article.id for article in articles]
-        for db_article in db.getItemByFeed(item[0]):                
+        for db_article in db.getItemByFeed(article_dict['feed_name']):                
                 if db_article[0] not in article_ids:
                         db.removeItem(db_article[0])
-        articles = article_trim(client,articles,item[3],int(item[1]))
+        articles = article_trim(client,articles,article_dict['release_type'],int(article_dict['count']))
 
-        input_articles = [(rss_db(config), art, item) for art in articles]                 # has to create  new database object because of threads
-        print(input_articles)
+        input_articles = [(rss_db(config), art, article_dict) for art in articles]                 # has to create  new database object because of threads
         p = ThreadPool(4)
-        
         p.starmap(download_articles,input_articles)                
 sync_items(client, db)
