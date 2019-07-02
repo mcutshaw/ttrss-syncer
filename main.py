@@ -33,8 +33,8 @@ def mark_article_read(client, id):                                      # only f
                         if(article.unread == True):
                                 article.toggle_unread()
         else:     
-                article = client.get_unread_articles([id])
-                article = article[0]
+                
+                article = client.get_articles([id])[0]
                 if(article.unread == True):
                         article.toggle_unread()
                 
@@ -43,6 +43,7 @@ def str_to_date(string):
         return datetime_object
 
 def download_item(url,feed_name):
+        print(url)
         response = requests.get(url, stream=True, allow_redirects=True) # grabs item to be downloaded as a stream
         local_filename = feed_name.replace(' ','_')+url.split('/')[-1]  # grabs the last element of an url and replaces chars
         if os.path.isfile(local_filename):                              # will not overwrite files, even if they are zero btyes...
@@ -184,6 +185,7 @@ def download_articles(db, art, article_dict ):
 feeds = get_feeds_from_config(config)
 os.chdir(config['Main']['Data'])
 for article_dict in feeds:
+        print(article_dict)
         articles = get_unread_articles(client, article_dict['feed_name'])
         if articles is None:
                 articles = []
