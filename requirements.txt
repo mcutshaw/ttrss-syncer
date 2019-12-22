@@ -1,0 +1,10 @@
+configparser
+hashlib
+sqlite3
+bs4
+configparser
+datetime
+multiprocessing
+os
+requests
+ttrss
