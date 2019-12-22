@@ -1,4 +1,4 @@
-from ttrss.client import TTRssClient
+from ttrss.client import TTRClient
 import configparser
 from requests.exceptions import ConnectionError
 import requests
