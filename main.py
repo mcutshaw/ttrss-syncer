@@ -7,15 +7,7 @@ from db import rss_db
 from bs4 import BeautifulSoup
 import os
 from multiprocessing.pool import ThreadPool
-
-config = configparser.ConfigParser()
-config.read('rss.conf')
-db = rss_db(config)
-url = config['Main']['Url']
-username = config['Main']['Username']
-password = config['Main']['Password']
-client = TTRClient(url, username, password)
-client.login()
+from urllib.parse import urljoin
 
 
 # makes a dict of feed names, count to keep, and filter patterns, release type,
@@ -49,13 +41,16 @@ def str_to_date(string):
 
 
 def download_item(url, feed_name):
+    print(url)
     # grabs the last element of an url and replaces chars
     local_filename = feed_name.replace(' ', '_')+url.split('/')[-1]
+    local_filename = local_filename.split('?')[0] # grabs the last element of an url and replaces chars
+
     # will not overwrite files, even if they are zero btyes...
     if os.path.isfile(local_filename):
         return local_filename
     # grabs item to be downloaded as a stream
-    with requests.get(url, stream=True, allow_redirects=True) as response:
+    with requests.get(url, stream=True, allow_redirects=True, headers=headers) as response:
 
         with open(local_filename, "wb") as handle:
             # download the item and write to a file
@@ -108,18 +103,19 @@ def article_trim(client, articles, release_type, count):
 
 
 def filtered_download(article, get_filter, feed_name):
-    main_page = requests.get(article.link)
+    main_page = requests.get(article.link, headers=headers)
     soup = BeautifulSoup(main_page.text, 'html.parser')
     paths = get_filter.split(':')
     a = None
     for item in paths:
+        print(item)
         if '*' in item:
             item = item.replace('*', '')
             a = [a for a in soup.find_all(item)]
-        elif '#' in item:
-            item = item.replace('#', '')
-            if item not in article.title:
-                return None
+        # elif '#' in item:
+        #     item = item.replace('#', '')
+        #     if item not in article.title:
+        #         return None
 
         elif '==' in item:
             l = []
@@ -129,20 +125,20 @@ def filtered_download(article, get_filter, feed_name):
                     l.append(k)
             a = l
 
-        elif '...->' in item:
-            l = []
-            item = item.split('...->')
-            for k in a:
-                if k.parent.parent.get(item[1]) != None and item[0] in k.parent.parent.get(item[1]):
-                    l.append(k)
-            a = l
-        elif '..->' in item:
-            l = []
-            item = item.split('..->')
-            for k in a:
-                if k.parent.get(item[1]) != None and item[0] in k.parent.get(item[1]):
-                    l.append(k)
-            a = l
+        # elif '...->' in item:
+        #     l = []
+        #     item = item.split('...->')
+        #     for k in a:
+        #         if k.parent.parent.get(item[1]) != None and item[0] in k.parent.parent.get(item[1]):
+        #             l.append(k)
+        #     a = l
+        # elif '..->' in item:
+        #     l = []
+        #     item = item.split('..->')
+        #     for k in a:
+        #         if k.parent.get(item[1]) != None and item[0] in k.parent.get(item[1]):
+        #             l.append(k)
+        #     a = l
         elif '->' in item:
             l = []
             item = item.split('->')
@@ -155,16 +151,18 @@ def filtered_download(article, get_filter, feed_name):
             item = item.replace('!', '')
             if len(a) > 0:
                 a = a[0]
-                return download_item(a.get(item), feed_name)
+                path = urljoin(article.link, a.get(item))
+                print(path)
+                return download_item(path, feed_name)
             else:
                 return None
-        elif '/' in item:
-            item = item.replace('/', '')
-            if len(a) > 0:
-                a = a[0]
-                return download_item('http://'+article.link.split('/')[2]+a.get(item), feed_name)
-            else:
-                return None
+        # elif '/' in item:
+        #     item = item.replace('/', '')
+        #     if len(a) > 0:
+        #         a = a[0]
+        #         return download_item('http://'+article.link.split('/')[2]+a.get(item), feed_name)
+        #     else:
+        #         return None
 
         if item == 'attachment':
             return download_item(article.attachments[0]['1'], feed_name)
@@ -199,30 +197,42 @@ def download_articles(db, art, article_dict):
         article_content = filtered_download(
             art, article_dict['filter'], article_dict['feed_name'])
         if article_content == None:
-            mark_article_read(client, art.id)
+            pass
+            # mark_article_read(client, art.id)
         else:
             db.insertItem(art.id, article_content,
                           article_dict['feed_name'], art.updated)
     trim_db(article_dict['feed_name'], db, int(
         article_dict['count']), article_dict['release_type'])
 
+if __name__ == "__main__":
+    config = configparser.ConfigParser()
+    config.read('rss.conf')
+    db = rss_db(config)
+    url = config['Main']['Url']
+    username = config['Main']['Username']
+    password = config['Main']['Password']
+    headers = {'User-Agent': config['Headers']['headers']}
+    client = TTRClient(url, username, password)
+    client.login()
 
-feeds = get_feeds_from_config(config)
-os.chdir(config['Main']['Data'])
-for article_dict in feeds:
-    print(article_dict)
-    articles = get_unread_articles(client, article_dict['feed_name'])
-    if articles is None:
-        articles = []
-    article_ids = [article.id for article in articles]
-    for db_article in db.getItemByFeed(article_dict['feed_name']):
-        if db_article[0] not in article_ids:
-            db.removeItem(db_article[0])
-    articles = article_trim(
-        client, articles, article_dict['release_type'], int(article_dict['count']))
 
-    # has to create  new database object because of threads
-    input_articles = [(rss_db(config), art, article_dict) for art in articles]
-    p = ThreadPool(4)
-    p.starmap(download_articles, input_articles)
-sync_items(client, db)
+    feeds = get_feeds_from_config(config)
+    os.chdir(config['Main']['Data'])
+    for article_dict in feeds:
+        print(article_dict)
+        articles = get_unread_articles(client, article_dict['feed_name'])
+        if articles is None:
+            articles = []
+        article_ids = [article.id for article in articles]
+        for db_article in db.getItemByFeed(article_dict['feed_name']):
+            if db_article[0] not in article_ids:
+                db.removeItem(db_article[0])
+        articles = article_trim(
+            client, articles, article_dict['release_type'], int(article_dict['count']))
+
+        # has to create  new database object because of threads
+        input_articles = [(rss_db(config), art, article_dict) for art in articles]
+        p = ThreadPool(4)
+        p.starmap(download_articles, input_articles)
+    sync_items(client, db)
