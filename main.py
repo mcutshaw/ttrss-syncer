@@ -9,7 +9,6 @@ import os
 from multiprocessing.pool import ThreadPool
 from urllib.parse import urljoin
 
-
 # makes a dict of feed names, count to keep, and filter patterns, release type,
 def get_feeds_from_config(config):
     l = []
@@ -112,11 +111,6 @@ def filtered_download(article, get_filter, feed_name):
         if '*' in item:
             item = item.replace('*', '')
             a = [a for a in soup.find_all(item)]
-        # elif '#' in item:
-        #     item = item.replace('#', '')
-        #     if item not in article.title:
-        #         return None
-
         elif '==' in item:
             l = []
             item = item.split('==')
@@ -125,20 +119,6 @@ def filtered_download(article, get_filter, feed_name):
                     l.append(k)
             a = l
 
-        # elif '...->' in item:
-        #     l = []
-        #     item = item.split('...->')
-        #     for k in a:
-        #         if k.parent.parent.get(item[1]) != None and item[0] in k.parent.parent.get(item[1]):
-        #             l.append(k)
-        #     a = l
-        # elif '..->' in item:
-        #     l = []
-        #     item = item.split('..->')
-        #     for k in a:
-        #         if k.parent.get(item[1]) != None and item[0] in k.parent.get(item[1]):
-        #             l.append(k)
-        #     a = l
         elif '->' in item:
             l = []
             item = item.split('->')
@@ -156,13 +136,6 @@ def filtered_download(article, get_filter, feed_name):
                 return download_item(path, feed_name)
             else:
                 return None
-        # elif '/' in item:
-        #     item = item.replace('/', '')
-        #     if len(a) > 0:
-        #         a = a[0]
-        #         return download_item('http://'+article.link.split('/')[2]+a.get(item), feed_name)
-        #     else:
-        #         return None
 
         if item == 'attachment':
             return download_item(article.attachments[0]['1'], feed_name)
