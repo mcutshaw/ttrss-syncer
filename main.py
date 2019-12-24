@@ -6,8 +6,9 @@ from datetime import datetime
 from db import rss_db
 from bs4 import BeautifulSoup
 import os
-from multiprocessing.pool import ThreadPool
+from multiprocessing import Process
 from urllib.parse import urljoin
+from downloader import downloader
 
 # makes a dict of feed names, count to keep, and filter patterns, release type,
 def get_feeds_from_config(config):
@@ -38,33 +39,11 @@ def str_to_date(string):
     datetime_object = datetime.strptime(string, '%Y-%m-%d %X')
     return datetime_object
 
-
-def download_item(url, feed_name):
-    print(url)
-    # grabs the last element of an url and replaces chars
-    local_filename = feed_name.replace(' ', '_')+url.split('/')[-1]
-    local_filename = local_filename.split('?')[0] # grabs the last element of an url and replaces chars
-
-    # will not overwrite files, even if they are zero btyes...
-    if os.path.isfile(local_filename):
-        return local_filename
-    # grabs item to be downloaded as a stream
-    with requests.get(url, stream=True, allow_redirects=True, headers=headers) as response:
-
-        with open(local_filename, "wb") as handle:
-            # download the item and write to a file
-            for chunk in response.iter_content(chunk_size=1024*1024):
-                if chunk:  # filter out keep-alive new chunks
-                    handle.write(chunk)
-    return local_filename
-
-
 def get_feed(client, feed_name):
     for cat in client.get_categories(unread_only=True):
         for feed in cat.feeds():
             if feed.title == feed_name:
                 return feed
-
 
 def get_headlines(client, feed_name):
     feeds = get_feed(client, feed_name)
@@ -73,7 +52,6 @@ def get_headlines(client, feed_name):
     else:
         headlines = feeds.headlines()
         return headlines
-
 
 def get_unread_articles(client, feed_name):
     headlines = get_headlines(client, feed_name)
@@ -89,7 +67,7 @@ def get_unread_articles(client, feed_name):
         return l
 
 
-def article_trim(client, articles, release_type, count):
+def sort_articles(client, articles, release_type, count):
     if count == 0:
         return articles
     elif release_type == 'rolling':
@@ -101,7 +79,7 @@ def article_trim(client, articles, release_type, count):
         return articles[:count]
 
 
-def filtered_download(article, get_filter, feed_name):
+def filtered_download(article, get_filter, feed_name, downloader):
     main_page = requests.get(article.link, headers=headers)
     soup = BeautifulSoup(main_page.text, 'html.parser')
     paths = get_filter.split(':')
@@ -133,15 +111,15 @@ def filtered_download(article, get_filter, feed_name):
                 a = a[0]
                 path = urljoin(article.link, a.get(item))
                 print(path)
-                return download_item(path, feed_name)
+                return downloader.addToDownloadQueue(path, feed_name)
             else:
                 return None
 
         if item == 'attachment':
-            return download_item(article.attachments[0]['1'], feed_name)
+            return downloader.addToDownloadQueue(article.attachments[0]['1'], feed_name)
 
 
-def sync_items(client, db):
+def ifRemovedMarkRead(client, db):
     listdir = os.listdir()                                  # grabs local items
     db_items = db.getItems()                                # grabs database items
     for item in db_items:
@@ -157,6 +135,30 @@ def sync_items(client, db):
             # if the item is not in the database remove it
             os.remove(item)
 
+def feedCycle(article_dict, config, downloader):
+    url = config['Main']['Url']
+    username = config['Main']['Username']
+    password = config['Main']['Password']
+    client = TTRClient(url, username, password)
+    client.login()
+
+    db = rss_db(config)
+    ifRemovedMarkRead(client, db) # first mark articles as read if they have been removed
+
+    articles = get_unread_articles(client, article_dict['feed_name']) # grab all unread articles
+
+    if articles is None:
+        articles = []
+    article_ids = [article.id for article in articles]
+
+    for db_article in db.getItemByFeed(article_dict['feed_name']):
+        if db_article[0] not in article_ids:
+            db.removeItem(db_article[0])
+
+    articles = sort_articles(client, articles, article_dict['release_type'], int(article_dict['count']))
+
+    # has to create  new database object because of threads
+    download_articles(rss_db(config), art, article_dict, downloader)
 
 def trim_db(feed, db, count, release_type):
     if release_type == 'rolling' and count != 0:
@@ -165,10 +167,10 @@ def trim_db(feed, db, count, release_type):
             db.removeItem(item[0])
 
 
-def download_articles(db, art, article_dict):
+def download_articles(db, art, article_dict, downloader):
     if not db.checkItemExists(art.id):
         article_content = filtered_download(
-            art, article_dict['filter'], article_dict['feed_name'])
+            art, article_dict['filter'], article_dict['feed_name'], downloader)
         if article_content == None:
             pass
             # mark_article_read(client, art.id)
@@ -181,31 +183,38 @@ def download_articles(db, art, article_dict):
 if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read('rss.conf')
-    db = rss_db(config)
-    url = config['Main']['Url']
-    username = config['Main']['Username']
-    password = config['Main']['Password']
+    
     headers = {'User-Agent': config['Headers']['headers']}
-    client = TTRClient(url, username, password)
-    client.login()
-
+    downloader = downloader(headers)
 
     feeds = get_feeds_from_config(config)
     os.chdir(config['Main']['Data'])
+    threads = []
     for article_dict in feeds:
         print(article_dict)
-        articles = get_unread_articles(client, article_dict['feed_name'])
-        if articles is None:
-            articles = []
-        article_ids = [article.id for article in articles]
-        for db_article in db.getItemByFeed(article_dict['feed_name']):
-            if db_article[0] not in article_ids:
-                db.removeItem(db_article[0])
-        articles = article_trim(
-            client, articles, article_dict['release_type'], int(article_dict['count']))
+        p = Process(target=feedCycle, args=(article_dict, config, downloader))
+        p.start()
+        threads.append(p)
+    for thread in threads:
+        thread.join()
+    downloader.stop()
 
-        # has to create  new database object because of threads
-        input_articles = [(rss_db(config), art, article_dict) for art in articles]
-        p = ThreadPool(4)
-        p.starmap(download_articles, input_articles)
-    sync_items(client, db)
+
+        
+
+# currently:
+# get feeds from config 
+# change into data dir
+# for feed:
+#     get all unread articles
+#     convert articles to article ids
+#     check if db articles are still unread, otherwise remove them
+#     trim articles
+#     download remaining articles
+
+#next:
+#get feeds from config
+#change into data dir
+#create downloader
+# for feed:
+#     make new thread
