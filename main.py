@@ -182,12 +182,24 @@ def download_articles(db, art, article_dict, downloader):
         article_dict['count']), article_dict['release_type'])
 
 if __name__ == "__main__":
+    try:
+        import socket
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        ## Create an abstract socket, by prefixing it with null. 
+        s.bind( '\0postconnect_gateway_notify_lock') 
+    except socket.error as e:
+        error_code = e.args[0]
+        error_string = e.args[1]
+        print("Process already running!")
+        exit()
+
     config = configparser.ConfigParser()
     config.read('rss.conf')
     
     headers = {'User-Agent': config['Headers']['headers']}
-    downloader = downloader(headers, dataDir=config['Main']['Data'])
+    downloader = downloader(headers, dataDir=config['Main']['Data'], numProcs=32)
 
+    os.chdir(config['Main']['Data'])
     feeds = get_feeds_from_config(config)
     threads = []
     for article_dict in feeds:
