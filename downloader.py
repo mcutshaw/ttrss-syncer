@@ -4,8 +4,9 @@ import requests
 from time import sleep
 
 class downloader:
-   def __init__(self, headers, numProcs=8):
+   def __init__(self, headers, numProcs=8, dataDir="."):
       self.headers = headers
+      self.dataDir=dataDir
       self.numProcs = numProcs
       self.queue = multiprocessing.Queue()
       self.createProcs()
@@ -16,6 +17,7 @@ class downloader:
          p.start()
 
    def _work(self):
+      os.chdir(self.dataDir)
       while(True):
          task = self.queue.get()
          if task is None:

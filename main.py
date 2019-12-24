@@ -158,7 +158,8 @@ def feedCycle(article_dict, config, downloader):
     articles = sort_articles(client, articles, article_dict['release_type'], int(article_dict['count']))
 
     # has to create  new database object because of threads
-    download_articles(rss_db(config), art, article_dict, downloader)
+    for article in articles:
+        download_articles(rss_db(config), article, article_dict, downloader)
 
 def trim_db(feed, db, count, release_type):
     if release_type == 'rolling' and count != 0:
@@ -185,10 +186,9 @@ if __name__ == "__main__":
     config.read('rss.conf')
     
     headers = {'User-Agent': config['Headers']['headers']}
-    downloader = downloader(headers)
+    downloader = downloader(headers, dataDir=config['Main']['Data'])
 
     feeds = get_feeds_from_config(config)
-    os.chdir(config['Main']['Data'])
     threads = []
     for article_dict in feeds:
         print(article_dict)
