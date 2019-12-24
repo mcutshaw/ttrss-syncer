@@ -173,8 +173,7 @@ def download_articles(db, art, article_dict, downloader):
         article_content = filtered_download(
             art, article_dict['filter'], article_dict['feed_name'], downloader)
         if article_content == None:
-            pass
-            # mark_article_read(client, art.id)
+            mark_article_read(client, art.id)
         else:
             db.insertItem(art.id, article_content,
                           article_dict['feed_name'], art.updated)
