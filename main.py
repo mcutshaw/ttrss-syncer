@@ -159,7 +159,7 @@ def feedCycle(article_dict, config, downloader):
 
     # has to create  new database object because of threads
     for article in articles:
-        download_articles(rss_db(config), article, article_dict, downloader)
+        download_articles(rss_db(config), article, article_dict, downloader, client)
 
 def trim_db(feed, db, count, release_type):
     if release_type == 'rolling' and count != 0:
@@ -168,7 +168,7 @@ def trim_db(feed, db, count, release_type):
             db.removeItem(item[0])
 
 
-def download_articles(db, art, article_dict, downloader):
+def download_articles(db, art, article_dict, downloader, client):
     if not db.checkItemExists(art.id):
         article_content = filtered_download(
             art, article_dict['filter'], article_dict['feed_name'], downloader)
