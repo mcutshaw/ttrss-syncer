@@ -9,6 +9,9 @@ import os
 from multiprocessing import Process
 from urllib.parse import urljoin
 from downloader import downloader
+import socket
+import sched
+import time
 
 # makes a dict of feed names, count to keep, and filter patterns, release type,
 def get_feeds_from_config(config):
@@ -182,10 +185,9 @@ def download_articles(db, art, article_dict, downloader, client):
 
 if __name__ == "__main__":
     try:
-        import socket
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        ## Create an abstract socket, by prefixing it with null. 
-        s.bind( '\0postconnect_gateway_notify_lock') 
+        ## Create an abstract socket, by prefixing it with null.
+        s.bind( '\0postconnect_gateway_notify_lock')
     except socket.error as e:
         error_code = e.args[0]
         error_string = e.args[1]
@@ -194,7 +196,7 @@ if __name__ == "__main__":
 
     config = configparser.ConfigParser()
     config.read('rss.conf')
-    
+
     headers = {'User-Agent': config['Headers']['headers']}
     downloader = downloader(headers, dataDir=config['Main']['Data'], numProcs=32)
 
@@ -211,10 +213,10 @@ if __name__ == "__main__":
     downloader.stop()
 
 
-        
+
 
 # currently:
-# get feeds from config 
+# get feeds from config
 # change into data dir
 # for feed:
 #     get all unread articles
