@@ -12,21 +12,21 @@ class rss_db:
             print("Config Error!")
             print(e)
             exit()
-        try:    
+        try:
             self.connect()
         except Exception as e:
             print("Database Error!")
             print(e)
             exit()
         tables = self.execute("SELECT name FROM sqlite_master WHERE type='table';")
-         
-        if(('items',) not in tables): 
+
+        if(('items',) not in tables):
             self.execute('''CREATE TABLE items
                             (id INTEGER,
                             local_name TEXT NOT NULL,
                             feed TEXT NOT NULL,
                             date TEXT NOT NULL);''')
-     
+
     def close(self):
         self.conn.close()
 
@@ -51,7 +51,7 @@ class rss_db:
         return text_return
 
     def insertItem(self,id, local_name, feed, date):
-        self.executevar('INSERT INTO items VALUES(?,?,?,?)', (id, local_name,feed, date))    
+        self.executevar('INSERT INTO items VALUES(?,?,?,?)', (id, local_name,feed, date))
 
     def getItems(self):
         items = self.execute('SELECT id,local_name,feed,date FROM items ORDER BY date')
@@ -61,11 +61,11 @@ class rss_db:
         item = self.executevar('SELECT id,local_name,feed,date FROM items WHERE id=?',(id,))
         return item[0]
 
-    
+
     def getItemByFeed(self, feed):
         item = self.executevar('SELECT id,local_name,feed,date FROM items WHERE feed=? ORDER BY date',(feed,))
         return item
-    
+
     def checkItemExists(self, id):
         count = self.executevar('SELECT COUNT(id) FROM items WHERE id=?',(id,))[0][0]
         if(count > 0):

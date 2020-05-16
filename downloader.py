@@ -1,14 +1,15 @@
 import multiprocessing
-import os
 import requests
 from time import sleep
+import os
 
 class downloader:
-   def __init__(self, headers, numProcs=8, dataDir="."):
+   def __init__(self, headers, connector, numProcs=8, dataDir="."):
       self.headers = headers
       self.dataDir=dataDir
       self.numProcs = numProcs
       self.queue = multiprocessing.Queue()
+      self.connector = connector
       self.createProcs()
 
    def createProcs(self):
@@ -17,7 +18,7 @@ class downloader:
          p.start()
 
    def _work(self):
-      os.chdir(self.dataDir)
+      os.chdir('/tmp')
       while(True):
          task = self.queue.get()
          if task is None:
@@ -31,16 +32,22 @@ class downloader:
    def download_item(self, url, local_filename):
       print(url)
       # will not overwrite files, even if they are zero btyes...
-      if os.path.isfile(local_filename):
+      if self.connector.check(local_filename):
          return local_filename
       # grabs item to be downloaded as a stream
-      with requests.get(url, stream=True, allow_redirects=True, headers=self.headers) as response:
+      try:
+          with requests.get(url, stream=True, allow_redirects=True, headers=self.headers) as response:
+             with open(local_filename, "wb") as handle:
+                # download the item and write to a file
+                for chunk in response.iter_content(chunk_size=1024*1024):
+                   if chunk:  # filter out keep-alive new chunks
+                      handle.write(chunk)
+          self.connector.upload(local_filename)
+          os.remove(local_filename)
+      except Exception as e:
+          print(e)
+          return 'Fail'
 
-         with open(local_filename, "wb") as handle:
-            # download the item and write to a file
-            for chunk in response.iter_content(chunk_size=1024*1024):
-               if chunk:  # filter out keep-alive new chunks
-                  handle.write(chunk)
 
    def addToDownloadQueue(self, url, feed_name):
       local_filename = feed_name.replace(' ', '_')+url.split('/')[-1]
