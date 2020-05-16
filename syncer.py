@@ -27,18 +27,14 @@ class syncer:
         #os.chdir(self.config['Main']['Data'])
         feeds = self.get_feeds_from_config(self.config)
         threads = []
-        print('test1')
         url = self.config['Main']['Url']
         username = self.config['Main']['Username']
         password = self.config['Main']['Password']
         client = TTRClient(url, username, password)
-        print('test4')
         client.login()
-        print('test2')
         db = rss_db(self.config)
 
         self.ifRemovedMarkRead(client, db) # first mark articles as read if they have been removed
-        print('test3')
 
         for article_dict in feeds:
             print(article_dict)
